@@ -5,6 +5,7 @@ npm run generate-cert
 npm start
 
 2.Start client on your local computer:
+
 cd client
 npm install
 
