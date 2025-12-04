@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package tunnel;
+
+// Основные сообщения
+message TunnelFrame {
+  string frame_id = 1;
+  FrameType type = 2;
+  bytes payload = 3;          // Обфусцированные данные
+  string obfuscation_method = 4;
+  string mask_type = 5;       // jsonrpc, graphql, rest
+  int64 timestamp = 6;
+  map<string, string> metadata = 7;
+}
+
+enum FrameType {
+  REGISTER = 0;
+  HTTP_REQUEST = 1;
+  HTTP_RESPONSE = 2;
+  HEALTH_CHECK = 3;
+  PING = 4;
+  PONG = 5;
+  DATA = 6;
+  ERROR = 7;
+}
+
+// HTTP запрос
+message HttpRequest {
+  string request_id = 1;
+  string method = 2;
+  string path = 3;
+  map<string, string> headers = 4;
+  bytes body = 5;
+  map<string, string> query = 6;
+}
+
+// HTTP ответ
+message HttpResponse {
+  string request_id = 1;
+  int32 status = 2;
+  map<string, string> headers = 3;
+  bytes body = 4;
+}
+
+// Регистрация клиента
+message Registration {
+  string client_id = 1;
+  ClientType client_type = 2;
+  repeated string capabilities = 3;
+  string local_app_url = 4;
+}
+
+enum ClientType {
+  LAPTOP = 0;
+  BROWSER = 1;
+}
+
+// Сервис туннеля
+service TunnelService {
+  // Бидирекциональный стрим для туннеля
+  rpc TunnelStream(stream TunnelFrame) returns (stream TunnelFrame);
+  
+  // HTTP прокси (для браузеров через gRPC-Web)
+  rpc HttpProxy(HttpRequest) returns (HttpResponse);
+  
+  // Регистрация клиента
+  rpc Register(Registration) returns (RegistrationResponse);
+}
+
+message RegistrationResponse {
+  string client_id = 1;
+  string tunnel_id = 2;
+  string server_version = 3;
+  string obfuscation_method = 4;
+  int64 server_time = 5;
+}

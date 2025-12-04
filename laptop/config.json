@@ -1,0 +1,6 @@
+{
+  "serverUrl": "your-render-app.onrender.com:443",
+  "localAppUrl": "http://localhost:8100",
+  "obfuscation": true,
+  "reconnect": true
+}

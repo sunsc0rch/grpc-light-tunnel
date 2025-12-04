@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: stealth-grpc-tunnel
+    env: node
+    plan: free
+    buildCommand: npm install && npm run proto:build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: OBFUSCATION_KEY
+        generateValue: true
+      - key: AES_KEY
+        generateValue: true

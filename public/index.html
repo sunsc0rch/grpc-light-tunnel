@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Stealth Tunnel</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #d4edda; }
+        .disconnected { background: #f8d7da; }
+        .console { background: #2d2d2d; color: #fff; padding: 10px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>🕵️ Stealth gRPC Tunnel</h1>
+    
+    <div id="status" class="status disconnected">
+        Connecting...
+    </div>
+    
+    <div id="content">
+        Loading through secure tunnel...
+    </div>
+    
+    <div class="console" id="console"></div>
+    
+    <script type="module">
+        import { JsonTunnelClient } from './web-client.js';
+        
+        const tunnel = new JsonTunnelClient();
+        const consoleEl = document.getElementById('console');
+        
+        function log(msg) {
+            consoleEl.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`;
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+        
+        async function init() {
+            try {
+                log('Connecting to tunnel...');
+                await tunnel.connect();
+                
+                document.getElementById('status').className = 'status connected';
+                document.getElementById('status').innerHTML = '✅ Connected to tunnel';
+                log('Connected successfully');
+                
+                // Загружаем главную страницу
+                await loadContent();
+                
+            } catch (error) {
+                log(`❌ Connection failed: ${error.message}`);
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('status').innerHTML = '❌ Connection failed';
+            }
+        }
+        
+        async function loadContent() {
+            try {
+                log('Loading content...');
+                
+                const response = await tunnel.sendHttpRequest({
+                    method: 'GET',
+                    path: '/',
+                    headers: {
+                        'Accept': 'text/html'
+                    }
+                });
+                
+                if (response.body) {
+                    const html = atob(response.body);
+                    document.getElementById('content').innerHTML = html;
+                    log('Content loaded successfully');
+                }
+                
+            } catch (error) {
+                log(`❌ Failed to load content: ${error.message}`);
+            }
+        }
+        
+        // Перехват ссылок
+        document.addEventListener('click', async (e) => {
+            if (e.target.tagName === 'A') {
+                e.preventDefault();
+                const href = e.target.getAttribute('href');
+                
+                if (href && href.startsWith('/')) {
+                    log(`Navigating to: ${href}`);
+                    
+                    const response = await tunnel.sendHttpRequest({
+                        method: 'GET',
+                        path: href,
+                        headers: { 'Accept': 'text/html' }
+                    });
+                    
+                    if (response.body) {
+                        const html = atob(response.body);
+                        document.getElementById('content').innerHTML = html;
+                        log('Navigation successful');
+                    }
+                }
+            }
+        });
+        
+        // Инициализация
+        init();
+    </script>
+</body>
+</html>
