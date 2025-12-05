@@ -1,5 +1,4 @@
 // gRPC-Web клиент для браузера
-//import { grpc } from '@improbable-eng/grpc-web';
 import { TunnelService } from './tunnel_pb.js';
 import { TunnelFrame, HttpRequest, Registration } from './tunnel_pb.js';
 
