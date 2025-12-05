@@ -445,20 +445,7 @@ window.tunnelProto = (function() {
     }
   };
 })();
-  // Для LAPTOP клиента:
-const laptopRegistration = {
-  client_type: ClientType.LAPTOP,
-  local_app_url: 'http://localhost:8100', // ← ТОЛЬКО для laptop
-  capabilities: ['HTTP_PROXY']
-};
 
-// Для BROWSER клиента:
-const browserRegistration = {
-  client_type: ClientType.BROWSER,
-  user_agent: navigator.userAgent, // ← для браузера другая инфа
-  origin: window.location.origin
-  // NO local_app_url!
-};
 // Создаем псевдонимы для совместимости
 window.proto = window.proto || {};
 window.proto.tunnel = window.tunnelProto;
