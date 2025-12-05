@@ -1,6 +1,8 @@
 // gRPC-Web клиент для браузера...
 import { TunnelService } from './tunnel-browser.js';
-import { TunnelFrame, HttpRequest, Registration } from './tunnel-browser.js';
+import { TunnelFrame, HttpRequest } from './tunnel-browser.js';
+const Registration = window.tunnelProto.Registration;
+const ClientType = window.tunnelProto.ClientType;
 
 class WebTunnelClient {
   constructor(endpoint = '/grpc') {
