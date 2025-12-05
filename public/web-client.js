@@ -1,8 +1,26 @@
-// gRPC-Web клиент для браузера...
-import { TunnelService } from './tunnel-browser.js';
-import { TunnelFrame, HttpRequest } from './tunnel-browser.js';
-const Registration = window.tunnelProto.Registration;
-const ClientType = window.tunnelProto.ClientType;
+// ========== ИМПОРТЫ ==========
+// tunnel-browser.js экспортирует window.tunnelProto, поэтому:
+const tunnelProto = window.tunnelProto;
+
+// Проверяем что объект существует
+if (!tunnelProto) {
+  console.error('tunnel-browser.js not loaded!');
+  throw new Error('Missing tunnel-browser.js');
+}
+
+// Извлекаем нужные классы
+const TunnelFrame = tunnelProto.TunnelFrame || tunnelProto.TunnelFrame;
+const HttpRequest = tunnelProto.HttpRequest || tunnelProto.HttpRequest;
+const Registration = tunnelProto.Registration || tunnelProto.Registration;
+const ClientType = tunnelProto.ClientType || { LAPTOP: 0, BROWSER: 1 };
+const TunnelService = tunnelProto.TunnelService || {
+  Register: {
+    methodName: 'Register',
+    service: 'TunnelService',
+    requestType: Registration,
+    responseType: tunnelProto.RegistrationResponse
+  }
+};
 
 class WebTunnelClient {
   constructor(endpoint = '/grpc') {
