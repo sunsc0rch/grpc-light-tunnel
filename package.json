@@ -3,7 +3,6 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "prebuild": "curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs",
     "start": "node server.js",
     "dev": "node server.js",
     "build": "echo 'No build needed for Node.js app'",
