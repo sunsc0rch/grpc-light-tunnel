@@ -3,6 +3,20 @@
 window.tunnelProto = (function() {
   'use strict';
   
+  // Для LAPTOP клиента:
+const laptopRegistration = {
+  client_type: ClientType.LAPTOP,
+  local_app_url: 'http://localhost:8000', // ← ТОЛЬКО для laptop
+  capabilities: ['HTTP_PROXY']
+};
+
+// Для BROWSER клиента:
+const browserRegistration = {
+  client_type: ClientType.BROWSER,
+  user_agent: navigator.userAgent, // ← для браузера другая инфа
+  origin: window.location.origin
+  // NO local_app_url!
+};
   // ==================== ENUMS ====================
   const FrameType = {
     REGISTER: 0,
@@ -274,6 +288,16 @@ window.tunnelProto = (function() {
       this.client_type = data.client_type !== undefined ? data.client_type : ClientType.BROWSER;
       this.capabilities = data.capabilities || [];
       this.local_app_url = data.local_app_url || '';
+          // ТОЛЬКО для LAPTOP
+    if (this.client_type === ClientType.LAPTOP) {
+      this.local_app_url = data.local_app_url || 'http://localhost:8000';
+    }
+    
+    // Для BROWSER - другая информация
+    if (this.client_type === ClientType.BROWSER) {
+      this.user_agent = data.user_agent;
+      this.origin = data.origin;
+    }
     }
     
     generateId() {
