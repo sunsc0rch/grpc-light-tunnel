@@ -290,7 +290,7 @@ const browserRegistration = {
       this.local_app_url = data.local_app_url || '';
           // ТОЛЬКО для LAPTOP
     if (this.client_type === ClientType.LAPTOP) {
-      this.local_app_url = data.local_app_url || 'http://localhost:8000';
+      this.local_app_url = data.local_app_url || 'http://localhost:8100';
     }
     
     // Для BROWSER - другая информация
@@ -332,9 +332,10 @@ const browserRegistration = {
     
     getCapabilitiesList() { return this.capabilities; }
     setCapabilitiesList(value) { this.capabilities = value; return this; }
-    
+    if (this.client_type === ClientType.LAPTOP) {
     getLocalAppUrl() { return this.local_app_url; }
     setLocalAppUrl(value) { this.local_app_url = value; return this; }
+}
   }
   
   class RegistrationResponse {
