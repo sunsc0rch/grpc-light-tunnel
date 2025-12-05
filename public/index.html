@@ -26,8 +26,7 @@
     <script src="https://unpkg.com/@improbable-eng/grpc-web@latest/dist/grpc-web-client.umd.js"></script>
     <script src="/tunnel-browser.js"></script>
     <script type="module">
-        import { JsonTunnelClient } from './web-client.js';
-        
+        const JsonTunnelClient = window.StealthTunnel.JsonTunnelClient;        
         const tunnel = new JsonTunnelClient();
         const consoleEl = document.getElementById('console');
         
