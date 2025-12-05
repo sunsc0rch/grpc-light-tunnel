@@ -75,6 +75,15 @@ app.get('/grpc/tunnel/stream', (req, res) => {
   });
 });
 
+app.post('/api/register', (req, res) => {
+  const key = crypto.randomBytes(32).toString('hex');
+  res.json({ 
+    clientId: '...',
+    obfuscationKey: key,
+    expiresAt: Date.now() + 3600000 // 1 час
+  });
+});
+
 // gRPC-Web унарные вызовы (POST)
 app.post('/grpc/tunnel.TunnelService/:method', async (req, res) => {
   const method = req.params.method;
