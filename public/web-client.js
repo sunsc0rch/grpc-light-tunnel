@@ -1,4 +1,4 @@
-// gRPC-Web клиент для браузера
+// gRPC-Web клиент для браузера...
 import { TunnelService } from './tunnel_pb.js';
 import { TunnelFrame, HttpRequest, Registration } from './tunnel_pb.js';
 
