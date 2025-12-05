@@ -332,10 +332,8 @@ const browserRegistration = {
     
     getCapabilitiesList() { return this.capabilities; }
     setCapabilitiesList(value) { this.capabilities = value; return this; }
-    if (this.client_type === ClientType.LAPTOP) {
     getLocalAppUrl() { return this.local_app_url; }
     setLocalAppUrl(value) { this.local_app_url = value; return this; }
-}
   }
   
   class RegistrationResponse {
