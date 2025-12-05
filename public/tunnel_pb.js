@@ -1459,22 +1459,6 @@ proto.tunnel.TunnelServiceClient.createClient =
 
 
 /**
- * @const
- * @type {!grpc.web.AbstractClientBase.MethodInfo<
- *   !proto.tunnel.TunnelFrame,
- *   !proto.tunnel.TunnelFrame>}
- */
-const methodInfo_TunnelService_TunnelStream = new grpc.web.AbstractClientBase.MethodInfo(
-  proto.tunnel.TunnelFrame,
-  /** @param {!proto.tunnel.TunnelFrame} request */
-  function(request) {
-    return request.serializeBinary();
-  },
-  proto.tunnel.TunnelFrame.deserializeBinary
-);
-
-
-/**
  * @param {!proto.tunnel.TunnelFrame} request The request proto
  * @param {?Object<string, string>} metadata User defined
  *     call metadata
