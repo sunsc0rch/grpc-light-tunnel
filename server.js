@@ -75,6 +75,26 @@ app.get('/grpc/tunnel/stream', (req, res) => {
   });
 });
 
+app.post('/api/register', (req, res) => {
+  const key = crypto.randomBytes(32).toString('hex');
+  const { client_type, local_app_url, user_agent } = req.body;
+  
+  if (client_type === 'laptop') {
+    // Сохраняем local_app_url для маршрутизации
+    saveLaptopClient(local_app_url);
+    res.json({ type: 'laptop', tunnel_id: '...' });
+    
+  } else if (client_type === 'browser') {
+    // Браузеру не нужен tunnel
+    res.json({ type: 'browser', client_id: '...' });
+  }
+  res.json({ 
+    clientId: '...',
+    obfuscationKey: key,
+    expiresAt: Date.now() + 3600000 // 1 час
+  });
+});
+
 // gRPC-Web унарные вызовы (POST)
 app.post('/grpc/tunnel.TunnelService/:method', async (req, res) => {
   const method = req.params.method;
