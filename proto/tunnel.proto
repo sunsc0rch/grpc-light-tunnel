@@ -1,4 +1,3 @@
-john@kuberbackup:~/grpc-light-tunnel$ cat ./proto/tunnel.proto 
 syntax = "proto3";
 
 package tunnel;
@@ -110,4 +109,3 @@ message StatsRequest {
   bool reset_counters = 1;
   repeated string metrics = 2;
 }
-john@kuberbackup:~/grpc-light-tunnel$ 
