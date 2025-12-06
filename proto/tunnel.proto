@@ -1,14 +1,14 @@
+john@kuberbackup:~/grpc-light-tunnel$ cat ./proto/tunnel.proto 
 syntax = "proto3";
 
 package tunnel;
 
-// Основные сообщения
 message TunnelFrame {
   string frame_id = 1;
   FrameType type = 2;
-  bytes payload = 3;          // Обфусцированные данные
+  bytes payload = 3;
   string obfuscation_method = 4;
-  string mask_type = 5;       // jsonrpc, graphql, rest
+  string mask_type = 5;
   int64 timestamp = 6;
   map<string, string> metadata = 7;
 }
@@ -17,14 +17,13 @@ enum FrameType {
   REGISTER = 0;
   HTTP_REQUEST = 1;
   HTTP_RESPONSE = 2;
-  HEALTH_CHECK = 3;
-  PING = 4;
-  PONG = 5;
-  DATA = 6;
-  ERROR = 7;
+  PING = 3;
+  PONG = 4;
+  DATA = 5;
+  ERROR = 6;
+  HEARTBEAT = 7;
 }
 
-// HTTP запрос
 message HttpRequest {
   string request_id = 1;
   string method = 2;
@@ -32,45 +31,83 @@ message HttpRequest {
   map<string, string> headers = 4;
   bytes body = 5;
   map<string, string> query = 6;
+  string protocol = 7;
 }
 
-// HTTP ответ
 message HttpResponse {
   string request_id = 1;
   int32 status = 2;
   map<string, string> headers = 3;
   bytes body = 4;
+  int64 response_time = 5;
 }
 
-// Регистрация клиента
-message Registration {
+message RegistrationRequest {
   string client_id = 1;
   ClientType client_type = 2;
   repeated string capabilities = 3;
   string local_app_url = 4;
+  string client_version = 5;
+  map<string, string> client_info = 6;
+}
+
+message RegistrationResponse {
+  bool success = 1;
+  string message = 2;
+  string tunnel_id = 3;
+  string server_version = 4;
+  string obfuscation_method = 5;
+  string mask_type = 6;
+  int64 server_time = 7;
+  map<string, string> config = 8;
 }
 
 enum ClientType {
   LAPTOP = 0;
   BROWSER = 1;
+  MOBILE = 2;
 }
 
-// Сервис туннеля
+message HealthCheck {
+  string check_id = 1;
+  int64 timestamp = 2;
+  map<string, string> metrics = 3;
+}
+
+message HealthResponse {
+  string check_id = 1;
+  bool healthy = 2;
+  string status = 3;
+  map<string, string> metrics = 4;
+  int64 response_time = 5;
+}
+
+message ErrorFrame {
+  string error_code = 1;
+  string message = 2;
+  string details = 3;
+  int64 timestamp = 4;
+  string frame_id = 5;
+}
+
+message Stats {
+  int64 bytes_sent = 1;
+  int64 bytes_received = 2;
+  int32 requests_processed = 3;
+  int32 active_connections = 4;
+  map<string, string> custom_stats = 5;
+}
+
 service TunnelService {
-  // Бидирекциональный стрим для туннеля
   rpc TunnelStream(stream TunnelFrame) returns (stream TunnelFrame);
-  
-  // HTTP прокси (для браузеров через gRPC-Web)
   rpc HttpProxy(HttpRequest) returns (HttpResponse);
-  
-  // Регистрация клиента
-  rpc Register(Registration) returns (RegistrationResponse);
+  rpc Register(RegistrationRequest) returns (RegistrationResponse);
+  rpc CheckHealth(HealthCheck) returns (HealthResponse);
+  rpc GetStats(StatsRequest) returns (Stats);
 }
 
-message RegistrationResponse {
-  string client_id = 1;
-  string tunnel_id = 2;
-  string server_version = 3;
-  string obfuscation_method = 4;
-  int64 server_time = 5;
+message StatsRequest {
+  bool reset_counters = 1;
+  repeated string metrics = 2;
 }
+john@kuberbackup:~/grpc-light-tunnel$ 
