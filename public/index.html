@@ -23,8 +23,9 @@
     </div>
     
     <div class="console" id="console"></div>
-<script src="https://unpkg.com/grpc-web@2.0.2/index.js"></script>
-<script src="./proto/tunnel_pb.js"></script>    
+    <script src="https://unpkg.com/@improbable-eng/grpc-web@latest/dist/grpc-web-client.umd.js"></script>
+    <script src="/tunnel-browser.js"></script>
+    <script src="/web-tunnel.js"></script>   
     <script type="module">
         import { JsonTunnelClient } from './web-client.js';
         
