@@ -3,7 +3,7 @@ services:
   stealth-tunnel:
     build:
       context: .
-      dockerfile: Dockerfile.northflank
+      dockerfile: Dockerfile
     ports:
       - port: 3000
         protocol: http
@@ -14,4 +14,4 @@ services:
         value: "3000"
     resources:
       memory: 512MB
-      cpu: 250m
+      cpu: 200m

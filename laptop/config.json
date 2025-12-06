@@ -1,5 +1,5 @@
 {
-  "serverUrl": "your-render-app.onrender.com:443",
+  "serverUrl": "https://racermagenta-g8jcvu--79167.stormkit.dev",
   "localAppUrl": "http://localhost:8100",
   "obfuscation": true,
   "reconnect": true
