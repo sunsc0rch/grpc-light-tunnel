@@ -54,4 +54,3 @@ process.on('unhandledRejection', (reason, promise) => {
   client.disconnect();
   process.exit(1);
 });
-
