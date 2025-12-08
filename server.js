@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
 // Импорт СГЕНЕРИРОВАННЫХ protobuf файлов
-import { TunnelFrame, HttpRequest, HttpResponse, Registration, RegistrationResponse, FrameType, ClientType } from './proto/tunnel_pb.js';
+import { TunnelFrame, HttpRequest, HttpResponse, Registration, RegistrationResponse, FrameType, ClientType } from './proto/proto/tunnel_pb.cjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
