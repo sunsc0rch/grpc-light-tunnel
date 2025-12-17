@@ -180,17 +180,17 @@ import cookieParser from 'cookie-parser';
 app.use(cookieParser());
 
 app.use((req, res, next) => {
-  // Разрешаем все origins (для тестирования)
-  const origin = req.headers.origin || '*';
-    if (req.path.startsWith('/api/') ||
-        req.path.startsWith('/static/') ||
-        req.path.startsWith('/media/') ||
-        req.path.startsWith('/tunnel/') ||
-        req.path.startsWith('/tunnel.TunnelService/') ||
-        req.path === '/' ||
-        req.path.includes('.')) {
-        return next();
-    }
+  if (req.path.startsWith('/api/') ||
+      req.path.startsWith('/static/') ||
+      req.path.startsWith('/media/') ||
+      req.path.startsWith('/admin/static/') ||
+      req.path.startsWith('/files/') ||
+      req.path.startsWith('/tunnel/') ||
+      req.path.startsWith('/tunnel.TunnelService/') ||
+      req.path === '/' ||
+      req.path.includes('.')) {
+    return next();
+  }
 
     // Все остальные пути редиректим через /tunnel/
     const clientId = req.query.client_id || req.cookies?.tunnel_client_id;
@@ -217,6 +217,140 @@ app.use((req, res, next) => {
 
   next();
 });
+app.use(['/static', '/media', '/admin/static', '/files'], async (req, res) => {
+
+  const fullPath = req.originalUrl; // ИЛИ: req.baseUrl + req.path
+
+  console.log(`📁 STATIC FILE REQUEST DEBUG:`);
+  console.log(`   req.originalUrl: ${req.originalUrl}`);
+  console.log(`   req.baseUrl: ${req.baseUrl}`);
+  console.log(`   req.path: ${req.path}`);
+  console.log(`   req.url: ${req.url}`);
+
+  let originalPath;
+  if (req.originalUrl) {
+    originalPath = req.originalUrl;
+  } else {
+    // Восстанавливаем вручную
+    originalPath = req.baseUrl + req.path;
+    if (!originalPath.startsWith('/')) {
+      originalPath = '/' + originalPath;
+    }
+  }
+
+  console.log(`📁 STATIC FILE: ${originalPath}`);
+
+  // Находим активный laptop
+  let activeLaptop = null;
+  for (const [clientId, client] of clients.entries()) {
+    if (client.type === 'laptop') {
+      activeLaptop = client;
+      break;
+    }
+  }
+
+  if (!activeLaptop) {
+    console.log('❌ No laptop for static file');
+    return serveStaticPlaceholder(originalPath, res);
+  }
+
+  const requestId = `static_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+
+  // Сохраняем запрос с ПОЛНЫМ путем
+  pendingRequests.set(requestId, {
+    res,
+    requestedAt: Date.now(),
+    laptopId: activeLaptop.id,
+    isStatic: true,
+    originalPath: originalPath, // ПОЛНЫЙ путь: /static/css/main.min.css
+    contentType: getContentType(originalPath)
+  });
+
+  // Создаем запрос с ПОЛНЫМ путем
+  const httpRequest = new tunnelProto.HttpRequest();
+  httpRequest.setRequestId(requestId);
+  httpRequest.setMethod('GET');
+  httpRequest.setPath(originalPath);
+
+  // Минимальные заголовки
+  const headers = {
+    'Accept': '*/*',
+    'User-Agent': 'Tunnel-Static/1.0'
+  };
+
+  if (req.headers.cookie) {
+    headers['Cookie'] = req.headers.cookie;
+  }
+
+  httpRequest.setHeaders(JSON.stringify(headers));
+  httpRequest.setBody(Buffer.from(''));
+  httpRequest.setQuery('{}');
+
+  const frame = new tunnelProto.TunnelFrame();
+  frame.setFrameId(`frame_${requestId}`);
+  frame.setType(tunnelProto.FrameType.HTTP_REQUEST);
+  frame.setTimestamp(Date.now());
+
+  // Metadata - передаем что это статика
+  const metadataMap = frame.getMetadataMap();
+  metadataMap.set('request_id', requestId);
+  metadataMap.set('is_static', 'true');
+  metadataMap.set('original_path', originalPath);
+  metadataMap.set('full_path', originalPath);
+
+  frame.setPayload(httpRequest.serializeBinary());
+
+  console.log(`📤 Static to laptop: ${originalPath} (${requestId})`);
+  addToQueue(activeLaptop.id, frame);
+
+  // Таймаут 3 секунды
+  const timeout = setTimeout(() => {
+    if (pendingRequests.has(requestId)) {
+      console.log(`⏰ Static timeout: ${originalPath}`);
+      pendingRequests.delete(requestId);
+      if (!res.headersSent) {
+        serveStaticPlaceholder(originalPath, res);
+      }
+    }
+  }, 3000);
+
+  res.on('close', () => {
+    clearTimeout(timeout);
+    pendingRequests.delete(requestId);
+  });
+});
+
+// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+function getContentType(path) {
+  if (path.endsWith('.css')) return 'text/css; charset=utf-8';
+  if (path.endsWith('.js')) return 'application/javascript; charset=utf-8';
+  if (path.endsWith('.png')) return 'image/png';
+  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg';
+  if (path.endsWith('.gif')) return 'image/gif';
+  if (path.endsWith('.svg')) return 'image/svg+xml';
+  if (path.endsWith('.ico')) return 'image/x-icon';
+  if (path.endsWith('.woff')) return 'font/woff';
+  if (path.endsWith('.woff2')) return 'font/woff2';
+  if (path.endsWith('.ttf')) return 'font/ttf';
+  if (path.endsWith('.eot')) return 'application/vnd.ms-fontobject';
+  return 'application/octet-stream';
+}
+
+function serveStaticPlaceholder(path, res) {
+  const contentType = getContentType(path);
+  res.setHeader('Content-Type', contentType);
+
+  if (path.endsWith('.css')) {
+    res.send('/* Placeholder CSS */\nbody { visibility: visible !important; }');
+  } else if (path.endsWith('.js')) {
+    res.send('// Placeholder JS\nconsole.log("Static placeholder");');
+  } else if (path.match(/\.(png|jpg|jpeg|gif|svg|ico)$/)) {
+    // 1x1 прозрачный пиксель
+    res.send(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
+  } else {
+    res.status(404).send('Static file not available');
+  }
+}
 app.use(express.static('public'));
 
 app.use((req, res, next) => {
@@ -361,6 +495,9 @@ app.post('/tunnel.TunnelService/SendFrame', (req, res) => {
         const payload = frame.getPayload_asU8();
 
         switch (frameType) {
+          case tunnelProto.FrameType.HTTP_REQUEST:
+            forwardHttpRequestToLaptop(frame);
+            break;
           case tunnelProto.FrameType.HTTP_RESPONSE:
             handleHttpResponseFrame(frame);
             break;
@@ -480,6 +617,63 @@ app.post('/tunnel.TunnelService/PollFrames', (req, res) => {
   }
 });
 
+function forwardHttpRequestToLaptop(frame) {
+  try {
+    const payload = frame.getPayload_asU8();
+    const httpRequest = tunnelProto.HttpRequest.deserializeBinary(payload);
+    const requestId = httpRequest.getRequestId();
+    const clientId = httpRequest.getMetadataMap().get('client_id');
+
+    // Находим активный laptop клиент
+    let activeLaptop = null;
+    for (const [id, client] of clients.entries()) {
+      if (client.type === 'laptop') {
+        activeLaptop = client;
+        break;
+      }
+    }
+
+    if (!activeLaptop) {
+      console.log('❌ No active laptop client found');
+      // Отправляем ошибку браузеру
+      sendErrorToBrowser(requestId, 503, 'No laptop connected');
+      return;
+    }
+
+    console.log(`📤 Forwarding HTTP request ${requestId} to laptop ${activeLaptop.id}`);
+
+    // Модифицируем фрейм: добавляем metadata с requestId для отслеживания
+    const modifiedFrame = new tunnelProto.TunnelFrame();
+    modifiedFrame.setFrameId(`forward_${requestId}`);
+    modifiedFrame.setType(tunnelProto.FrameType.HTTP_REQUEST);
+    modifiedFrame.setTimestamp(Date.now());
+
+    // Создаем metadata для отслеживания
+    const metadataMap = modifiedFrame.getMetadataMap();
+    metadataMap.set('request_id', requestId);
+    metadataMap.set('browser_client_id', clientId);
+    metadataMap.set('forwarded_via', 'server');
+
+    // Сохраняем оригинальный payload
+    modifiedFrame.setPayload(payload);
+
+    // Отправляем laptop клиенту
+    addToQueue(activeLaptop.id, modifiedFrame);
+
+    // Сохраняем связь requestId → ожидающий response
+    pendingRequests.set(requestId, {
+      browserId: clientId,
+      laptopId: activeLaptop.id,
+      forwardedAt: Date.now(),
+      originalFrame: frame
+    });
+
+    console.log(`✅ Request ${requestId} forwarded to laptop`);
+
+  } catch (error) {
+    console.error('❌ Error forwarding HTTP request:', error);
+  }
+}
 
 // Обрабатываем запрос к Wagtail
 async function handleHttpRequest(frame, clientId, tunnelId) {
@@ -515,38 +709,11 @@ async function handleHttpRequest(frame, clientId, tunnelId) {
       }
     }
 
-    // Отправляем запрос к Wagtail
-    const wagtailUrl = `http://localhost:8100${path}`;
-    const wagtailResponse = await fetch(wagtailUrl, {
-      method: method,
+    const wagtailResponse = await fetch(path, {
+      method,
       headers: wagtailHeaders,
-      body: body.length > 0 ? Buffer.from(body) : undefined,
-      // Важно: разрешаем credentials для корректной работы cookies
-      credentials: 'include'
+      body
     });
-
-    // Извлекаем Set-Cookie заголовки
-    const setCookieHeader = wagtailResponse.headers.get('Set-Cookie');
-    if (setCookieHeader) {
-      console.log(`🍪 Set-Cookie received: ${setCookieHeader}`);
-      // Сохраняем cookies в jar для последующего использования
-      try {
-        const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
-        for (const cookie of cookies) {
-          // Обрабатываем каждый cookie
-          const cookieParts = cookie.split(';')[0].split('=');
-          if (cookieParts.length === 2) {
-            const [name, value] = cookieParts;
-            // Устанавливаем cookie в jar
-            const cookieString = `${name}=${value}`;
-            cookieJar.setCookie(cookieString, 'http://localhost:8100');
-          }
-        }
-      } catch (err) {
-        console.error('❌ Error processing Set-Cookie:', err);
-      }
-    }
-
     // Получаем тело ответа
     const responseBody = await wagtailResponse.arrayBuffer();
 
@@ -606,7 +773,6 @@ async function handleHttpRequest(frame, clientId, tunnelId) {
 }
 
 
-// В обработчике HTTP ответов добавьте передачу sessionid
 function handleHttpResponseFrame(frame) {
   try {
     const payload = frame.getPayload_asU8();
@@ -691,7 +857,6 @@ function handleHttpResponseFrame(frame) {
     // Удаляем из ожидающих
     pendingRequests.delete(requestId);
 
-    // Очищаем через 5 минут
     setTimeout(() => {
       processedResponses.delete(responseKey);
     }, 300000);
@@ -699,7 +864,46 @@ function handleHttpResponseFrame(frame) {
     // Парсим заголовки
     const headers = JSON.parse(httpResponse.getHeaders() || '{}');
     let body = httpResponse.getBody();
+    const finalHeaders = { ...headers };
 
+    // ДЛЯ СТАТИКИ - ОСОБАЯ ОБРАБОТКА
+    if (pendingRequest.isStatic) {
+      console.log(`📁 Processing static file: ${pendingRequest.originalPath}`);
+
+      // ВАЖНО: Устанавливаем правильный Content-Type
+      const contentType = pendingRequest.contentType || getContentType(pendingRequest.originalPath);
+      finalHeaders['content-type'] = contentType;
+
+      // Убираем все HTML-инжекции для статики
+      finalHeaders['Cache-Control'] = 'public, max-age=300'; // Кэшируем статику
+
+      // CORS
+      finalHeaders['Access-Control-Allow-Origin'] = '*';
+      finalHeaders['Access-Control-Allow-Credentials'] = 'true';
+
+      // Тело ответа
+      let body = httpResponse.getBody_asU8();
+      if (!body || body.length === 0) {
+        body = Buffer.from('');
+      }
+
+      // Отправляем ответ
+      if (!pendingRequest.res.headersSent) {
+        pendingRequest.res.writeHead(statusCode, finalHeaders);
+
+        if (Buffer.isBuffer(body)) {
+          pendingRequest.res.end(body);
+        } else if (body instanceof Uint8Array) {
+          pendingRequest.res.end(Buffer.from(body));
+        } else {
+          pendingRequest.res.end('');
+        }
+
+        console.log(`✅ Static file sent: ${pendingRequest.originalPath}, type: ${contentType}`);
+      }
+
+      return; // ВЫХОДИМ, НЕ ПРОДОЛЖАЕМ HTML ОБРАБОТКУ
+    }
     // Извлекаем куки из метаданных фрейма
     const metadataMap = frame.getMetadataMap();
     const cookies = [];
@@ -744,9 +948,6 @@ function handleHttpResponseFrame(frame) {
         }
       });
     }
-
-    // Подготавливаем финальные заголовки
-    const finalHeaders = { ...headers };
 
     // Content-Type по умолчанию
     if (!finalHeaders['content-type'] && !finalHeaders['Content-Type']) {
@@ -793,7 +994,7 @@ function handleHttpResponseFrame(frame) {
     const contentType = headers['content-type'] || headers['Content-Type'] || '';
     const isHtml = contentType.includes('text/html');
 
-    // ИНЖЕКТИРУЕМ СКРИПТ ЕСЛИ ЭТО HTML - УЛУЧШЕННАЯ ВЕРСИЯ
+    // ИНЖЕКТИРУЕМ СКРИПТ ЕСЛИ ЭТО HTML
     if (isHtml && body) {
       console.log(`🔧 HTML response detected for ${requestId}, preparing to inject script...`);
 
@@ -819,7 +1020,6 @@ function handleHttpResponseFrame(frame) {
         bodyStr = bodyStr.replace(/<input[^>]*data-cookie="djdt[^"]*"[^>]*>/gi, '');
         const injectScript = `
           <script>
-            // Tunnel auto-inject script
             (function() {
               console.log('🔧 Tunnel script injected for ${requestId}');
 
@@ -1281,49 +1481,6 @@ app.get('/api/sync-status/:requestId', (req, res) => {
   }
 });
 
-app.use('/static', createProxyMiddleware({
-    target: 'http://localhost:8100',
-    changeOrigin: true,
-    onProxyReq: (proxyReq, req, res) => {
-        console.log(`📁 Static file: ${req.url}`);
-        proxyReq.removeHeader('x-tunnel-client-id');
-    },
-    onProxyRes: (proxyRes, req, res) => {
-        // Добавляем CORS для статических файлов
-        proxyRes.headers['Access-Control-Allow-Origin'] = '*';
-        proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
-
-        // Убедимся, что Content-Type правильный
-        if (req.url.endsWith('.css') && !proxyRes.headers['content-type']) {
-            proxyRes.headers['content-type'] = 'text/css; charset=utf-8';
-        }
-        if (req.url.endsWith('.js') && !proxyRes.headers['content-type']) {
-            proxyRes.headers['content-type'] = 'application/javascript; charset=utf-8';
-        }
-    }
-}));
-
-app.use('/media', createProxyMiddleware({
-    target: 'http://localhost:8100',
-    changeOrigin: true
-}));
-
-app.use('/admin/static', createProxyMiddleware({
-    target: 'http://localhost:8100',
-    changeOrigin: true
-}));
-app.use('/files', createProxyMiddleware({
-    target: 'http://localhost:8100',
-    changeOrigin: true,
-    onProxyReq: (proxyReq, req, res) => {
-        console.log(`📁 Files proxy: ${req.url}`);
-    },
-    onProxyRes: (proxyRes, req, res) => {
-        // Добавляем CORS
-        proxyRes.headers['Access-Control-Allow-Origin'] = '*';
-        proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
-    }
-}));
 // HTTP прокси для браузеров
 app.all('/tunnel/*', async (req, res) => {
   try {
@@ -1456,6 +1613,8 @@ app.all('/tunnel/*', async (req, res) => {
       method: req.method // Сохраняем метод для отладки
     });
 
+
+    console.log(`📤 HTTP Request ${requestId} queued for laptop ${activeLaptop.id}`);
     // Таймаут 10 секунд
     const timeout = setTimeout(() => {
       if (pendingRequests.has(requestId)) {
