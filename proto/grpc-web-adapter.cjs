@@ -1,6 +1,5 @@
 // proto/grpc-web-adapter.cjs
 const improbable = require('@improbable-eng/grpc-web');
-const { NodeHttpTransport } = require('@improbable-eng/grpc-web-node-http-transport');
 
 // Создаем совместимый MethodDescriptor
 class MethodDescriptor {
@@ -11,10 +10,6 @@ class MethodDescriptor {
     this.responseType = responseType;
     this.requestSerializeFn = requestSerializeFn;
     this.responseDeserializeFn = responseDeserializeFn;
-    this.serviceName = methodPath.split('/')[1] || 'tunnel.TunnelService';
-    this.methodName = methodPath.split('/')[2] || '';
-    this.requestStream = false;
-    this.responseStream = false;
   }
 }
 
@@ -22,7 +17,7 @@ class MethodDescriptor {
 class GrpcWebClientBase {
   constructor(options = {}) {
     this.options = options;
-    this.transport = options.transport || NodeHttpTransport();
+    this.transport = options.transport;
   }
   
   rpcCall(hostname, request, metadata, methodDescriptor, callback) {
@@ -34,7 +29,7 @@ class GrpcWebClientBase {
     const methodInfo = {
       method: methodDescriptor.methodPath,
       service: {
-        serviceName: methodDescriptor.serviceName
+        serviceName: methodDescriptor.methodPath.split('/')[1] || 'tunnel.TunnelService'
       },
       requestStream: false,
       responseStream: false,
@@ -42,17 +37,36 @@ class GrpcWebClientBase {
       responseType: methodDescriptor.responseType
     };
     
+    // Конвертируем metadata в формат improbable-eng
+    const improbableMetadata = new improbable.grpc.Metadata();
+    if (metadata && metadata.headersMap) {
+      Object.entries(metadata.headersMap).forEach(([key, values]) => {
+        values.forEach(value => {
+          improbableMetadata.append(key, value);
+        });
+      });
+    }
+    
     improbable.grpc.invoke(methodInfo, {
       request: request,
       host: hostname,
-      metadata: metadata || {},
+      metadata: improbableMetadata,
       transport: this.transport,
-      onEnd: (response) => {
-        if (response.status === 0) {
-          callback(null, response.message);
+      onHeaders: (headers) => {
+        console.log('📥 Received headers:', headers);
+      },
+      onMessage: (message) => {
+        console.log('📥 Received message');
+      },
+      onEnd: (code, message, trailers) => {
+        console.log('📥 Request ended:', { code, message: message ? 'has message' : 'no message', trailers });
+        
+        if (code === improbable.grpc.Code.OK) {
+          callback(null, message);
         } else {
-          const error = new Error(response.statusMessage || `gRPC error ${response.status}`);
-          error.code = response.status;
+          const error = new Error(message || `gRPC error ${code}`);
+          error.code = code;
+          error.metadata = trailers;
           callback(error);
         }
       }
@@ -92,6 +106,21 @@ module.exports = {
     ClientDuplexStream: class {},
     
     // Метаданные
-    Metadata: improbable.grpc.Metadata || class {}
+    Metadata: class Metadata {
+      constructor(init) {
+        this.headersMap = init || {};
+      }
+      
+      append(key, value) {
+        if (!this.headersMap[key]) {
+          this.headersMap[key] = [];
+        }
+        this.headersMap[key].push(value);
+      }
+      
+      get(key) {
+        return this.headersMap[key];
+      }
+    }
   }
 };

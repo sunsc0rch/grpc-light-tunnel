@@ -1,0 +1,30 @@
+app:
+  name: grpc-tunnel
+  region: eu-west-1
+
+build:
+  command: npm run build
+  output: .
+
+environment:
+  - NODE_ENV=production
+  - PORT=80
+
+deployments:
+  - type: static
+    path: ./public
+    routes:
+      - path: /*
+        dest: /
+  
+  - type: node
+    path: ./server.js
+    routes:
+      - path: /grpc/*
+        dest: /
+      - path: /tunnel.*
+        dest: /
+      - path: /proxy/*
+        dest: /
+      - path: /client/*
+        dest: /

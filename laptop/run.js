@@ -1,57 +1,53 @@
 #!/usr/bin/env node
 
-const LaptopGrpcClient = require('./client.cjs');
+// Патч для Node.js
+if (typeof self === 'undefined') {
+  global.self = global;
+}
 
-// Конфигурация
+const FastGrpcTunnelClient = require('./client.cjs');
+
 const config = {
-  // URL вашего сервера на Stormkit
-  serverUrl: process.env.SERVER_URL || 'https://racermagenta-g8jcvu--79167.stormkit.dev',
-  
-  // URL вашего локального приложения (Wagtail)
+  serverUrl: process.env.SERVER_URL || 'http://localhost:3003',
   localAppUrl: process.env.LOCAL_APP_URL || 'http://localhost:8100',
-  
-  // Интервал переподключения (мс)
-  reconnectInterval: 5000,
-  
-  // Автоматическое переподключение
-  reconnect: true
+  pollInterval: 1000,
+  debug: process.env.DEBUG === 'true'
 };
 
-console.log('🚀 Starting gRPC Tunnel Client');
-console.log('==============================');
+console.log('🚀 Starting Fast gRPC-Web Tunnel Client\n');
 
-// Создаем клиент
-const client = new LaptopGrpcClient(config);
+const client = new FastGrpcTunnelClient(config);
 
 // Подключаемся
 client.connect().catch(error => {
-  console.error('Failed to connect:', error.message);
-  process.exit(1);
+  console.error('❌ Initial connection failed:', error.message);
+  console.log('Retrying in 5 seconds...');
+  setTimeout(() => process.exit(1), 5000);
 });
 
-// Обработка сигналов завершения
+// Обработка сигналов
 process.on('SIGINT', () => {
-  console.log('\n🛑 Received SIGINT, shutting down...');
+  console.log('\n🛑 Shutting down...');
   client.disconnect();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
-  console.log('\n🛑 Received SIGTERM, shutting down...');
+  console.log('\n🛑 Shutting down...');
   client.disconnect();
   process.exit(0);
 });
 
-// Обработка необработанных ошибок
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error);
-  client.disconnect();
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled rejection at:', promise, 'reason:', reason);
-  client.disconnect();
-  process.exit(1);
-});
-
+// Периодический статус
+setInterval(() => {
+  const status = client.getStatus();
+  console.log(`
+📊 Status:
+   Connected: ${status.connected ? '✅' : '❌'}
+   Polling: ${status.polling ? '🔄' : '⏸️'}
+   Requests: ${status.stats.requestsForwarded}
+   Polls: ${status.stats.polls}
+   Frames: ${status.stats.framesReceived}
+   Errors: ${status.stats.errors}
+  `);
+}, 30000);

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sync Session</title>
+    <style>
+        body { font-family: monospace; margin: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        .log { background: #f0f0f0; padding: 10px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Sync Session with Wagtail</h1>
+    
+    <div>
+        <button id="syncBtn">Sync Session</button>
+        <button id="checkBtn">Check Cookies</button>
+        <button id="clearBtn">Clear Cookies</button>
+    </div>
+    
+    <div id="log" class="log"></div>
+    
+    <script>
+        function log(msg) {
+            const logEl = document.getElementById('log');
+            logEl.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
+            console.log(msg);
+        }
+        
+        function getClientId() {
+            return localStorage.getItem('tunnel_client_id') || 
+                   document.cookie.match(/tunnel_client_id=([^;]+)/)?.[1];
+        }
+        
+        document.getElementById('syncBtn').onclick = async () => {
+            const clientId = getClientId();
+            if (!clientId) {
+                log('❌ No client_id found. Please connect to tunnel first.');
+                return;
+            }
+            
+            log('🔄 Syncing session with wagtail...');
+            
+            try {
+                const response = await fetch('/api/sync-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ clientId })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log('✅ Session sync initiated');
+                    log(`Response: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    log(`❌ Sync failed: ${data.error}`);
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+            }
+        };
+        
+        document.getElementById('checkBtn').onclick = () => {
+            log('=== Current Cookies ===');
+            log(`document.cookie: ${document.cookie}`);
+            
+            const cookies = document.cookie.split(';');
+            cookies.forEach(cookie => {
+                const [name, value] = cookie.trim().split('=');
+                if (name && value) {
+                    if (name === 'sessionid') {
+                        log(`🎉 ${name}=${value.substring(0, 30)}... (${value.length} chars)`);
+                    } else {
+                        log(`${name}=${value.substring(0, 20)}... (${value.length} chars)`);
+                    }
+                }
+            });
+            
+            log(`Client ID: ${getClientId() || 'Not found'}`);
+        };
+        
+        document.getElementById('clearBtn').onclick = () => {
+            document.cookie.split(';').forEach(cookie => {
+                const name = cookie.split('=')[0].trim();
+                document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+            });
+            log('🧹 Cookies cleared');
+        };
+        
+        // Auto-check on load
+        window.onload = () => {
+            log('Page loaded');
+            document.getElementById('checkBtn').click();
+        };
+    </script>
+</body>
+</html>

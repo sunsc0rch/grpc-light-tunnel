@@ -1,5 +1,5 @@
 {
-  "serverUrl": "https://racermagenta-g8jcvu--79167.stormkit.dev",
+  "serverUrl": "http://localhost:6000",
   "localAppUrl": "http://localhost:8100",
   "obfuscation": true,
   "reconnect": true

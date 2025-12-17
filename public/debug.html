@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Debug - gRPC Tunnel</title>
+    <style>
+        body { font-family: monospace; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        pre { background: #f5f5f5; padding: 10px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 gRPC Tunnel Debug</h1>
+    
+    <div class="section">
+        <h2>Client Info</h2>
+        <div id="clientInfo">Loading...</div>
+    </div>
+    
+    <div class="section">
+        <h2>Cookies</h2>
+        <div id="cookies"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Test Links</h2>
+        <button onclick="testStatic()">Test Static Files</button>
+        <button onclick="testLogin()">Test Login Form</button>
+        <button onclick="testCSRF()">Test CSRF</button>
+        <div id="testResult"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Console</h2>
+        <div id="console"></div>
+    </div>
+    
+    <script>
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            document.getElementById('console').appendChild(div);
+        }
+        
+        function updateClientInfo() {
+            const clientId = window.getClientId ? window.getClientId() : 'Not found';
+            document.getElementById('clientInfo').innerHTML = `
+                <p><strong>Client ID:</strong> ${clientId || 'None'}</p>
+                <p><strong>Connected:</strong> ${window.tunnelClient && window.tunnelClient.isConnected ? '✅ Yes' : '❌ No'}</p>
+                <p><strong>Local Storage:</strong> ${localStorage.getItem('tunnel_client_id') || 'Empty'}</p>
+            `;
+        }
+        
+        function updateCookies() {
+            const cookies = document.cookie.split(';').map(c => c.trim());
+            document.getElementById('cookies').innerHTML = `
+                <p><strong>Total:</strong> ${cookies.length} cookies</p>
+                <pre>${cookies.join('\n')}</pre>
+            `;
+        }
+        
+        async function testStatic() {
+            log('Testing static files...');
+            try {
+                const response = await fetch('/static/admin/css/base.css');
+                log(`Static test: ${response.status} ${response.statusText}`, 
+                    response.ok ? 'success' : 'error');
+            } catch (e) {
+                log(`Static test error: ${e.message}`, 'error');
+            }
+        }
+        
+        async function testLogin() {
+            log('Testing login form...');
+            try {
+                const response = await fetch('/tunnel/accounts/login/');
+                log(`Login page: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const html = await response.text();
+                    const hasCSRF = html.includes('csrfmiddlewaretoken');
+                    log(`CSRF field: ${hasCSRF ? '✅ Found' : '❌ Not found'}`, 
+                        hasCSRF ? 'success' : 'warning');
+                }
+            } catch (e) {
+                log(`Login test error: ${e.message}`, 'error');
+            }
+        }
+        
+        function testCSRF() {
+            log('Testing CSRF tokens...');
+            const fromCookies = window.enhancedInterceptor?.getCSRFTokenFromCookies();
+            const fromMeta = window.enhancedInterceptor?.getCSRFTokenFromMeta();
+            
+            log(`CSRF from cookies: ${fromCookies ? '✅ Found' : '❌ Not found'}`);
+            log(`CSRF from meta: ${fromMeta ? '✅ Found' : '❌ Not found'}`);
+            
+            if (fromCookies && fromMeta) {
+                log(`Tokens match: ${fromCookies === fromMeta ? '✅ Yes' : '❌ No'}`);
+            }
+        }
+        
+        // Auto-update
+        setInterval(() => {
+            updateClientInfo();
+            updateCookies();
+        }, 2000);
+        
+        // Initial load
+        updateClientInfo();
+        updateCookies();
+        log('Debug page loaded', 'success');
+    </script>
+</body>
+</html>
