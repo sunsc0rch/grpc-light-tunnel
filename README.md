@@ -5,7 +5,7 @@ npm start
 
 2.Start client on your local computer:
 
-cd client
+cd laptop/
 npm install
 
 # Linux/Mac
