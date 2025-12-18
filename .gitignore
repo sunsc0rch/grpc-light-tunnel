@@ -1,2 +1,4 @@
 node_modules/
 laptop/node_modules/
+node_modules/*
+laptop/node_modules/*
