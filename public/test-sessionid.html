@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Session Cookies</title>
+    <style>
+        body { font-family: monospace; margin: 20px; }
+        .log { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+        button { margin: 5px; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Test Session Cookies</h1>
+    
+    <div>
+        <button onclick="checkCookies()">Check Cookies</button>
+        <button onclick="testDirect()">Test Direct to Wagtail</button>
+        <button onclick="testThroughTunnel()">Test Through Tunnel</button>
+        <button onclick="clearCookies()">Clear Cookies</button>
+    </div>
+    
+    <div id="output" class="log"></div>
+    
+    <script>
+        function log(msg) {
+            const output = document.getElementById('output');
+            output.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
+            console.log(msg);
+        }
+        
+        function checkCookies() {
+            log('=== Current Cookies ===');
+            log('document.cookie: ' + document.cookie);
+            
+            const cookies = document.cookie.split(';');
+            cookies.forEach(cookie => {
+                const [name, value] = cookie.trim().split('=');
+                if (name && value) {
+                    log(`${name}=${value.substring(0, 20)}${value.length > 20 ? '...' : ''} (${value.length} chars)`);
+                }
+            });
+            
+            log('LocalStorage tunnel_client_id: ' + localStorage.getItem('tunnel_client_id'));
+        }
+        
+        async function testDirect() {
+            try {
+                log('=== Testing Direct to Wagtail ===');
+                const response = await fetch('http://localhost:8100/', {
+                    credentials: 'include'
+                });
+                log(`Direct: Status ${response.status}`);
+                log(`Direct: Cookies in response: ${response.headers.get('set-cookie') || 'None'}`);
+            } catch (error) {
+                log('Direct test error: ' + error.message);
+            }
+        }
+        
+        async function testThroughTunnel() {
+            try {
+                log('=== Testing Through Tunnel ===');
+                
+                // Сначала получаем client_id если нет
+                let clientId = localStorage.getItem('tunnel_client_id');
+                if (!clientId) {
+                    const regResponse = await fetch('/api/register-browser', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    const data = await regResponse.json();
+                    clientId = data.clientId;
+                    localStorage.setItem('tunnel_client_id', clientId);
+                    log('Registered new client: ' + clientId);
+                }
+                
+                // Тестируем через туннель
+                const response = await fetch('/debug-session', {
+                    headers: {
+                        'x-tunnel-client-id': clientId
+                    }
+                });
+                
+                const data = await response.json();
+                log('Tunnel debug response:');
+                log('  sessionid: ' + data.sessionid + ' (' + data.sessionid_length + ' chars)');
+                log('  csrftoken: ' + data.csrftoken + ' (' + data.csrftoken_length + ' chars)');
+                
+            } catch (error) {
+                log('Tunnel test error: ' + error.message);
+            }
+        }
+        
+        function clearCookies() {
+            document.cookie.split(';').forEach(cookie => {
+                const name = cookie.split('=')[0].trim();
+                document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+            });
+            log('Cookies cleared');
+        }
+        
+        // Auto-run on load
+        window.addEventListener('load', () => {
+            log('Page loaded');
+            checkCookies();
+        });
+    </script>
+</body>
+</html>

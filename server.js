@@ -34,7 +34,102 @@ async function loadProtobuf() {
 }
 
 let tunnelProto;
+// ==================== НАСТРОЙКИ ЛОГИРОВАНИЯ ====================
+const LOG_LEVELS = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3,
+  NONE: 4
+};
 
+const LOG_CONFIG = {
+  level: LOG_LEVELS.INFO, // По умолчанию INFO
+  pollSpamSuppression: true, // Подавлять спам от Poll
+  pollSpamInterval: 5000, // Логировать пустые polls раз в 5 секунд
+  logPollWithData: true, // Логировать polls с данными всегда
+  logRequests: true, // Логировать HTTP запросы
+  logResponses: true, // Логировать HTTP ответы
+  logStatic: true, // Логировать статические файлы
+  logGrpc: false, // Детальное логирование gRPC
+  logErrors: true // Логировать ошибки всегда
+};
+
+// Хранилище для подавления спама
+const lastPollLog = new Map(); // clientId -> timestamp
+
+// Утилиты логирования
+function logDebug(...args) {
+  if (LOG_CONFIG.level <= LOG_LEVELS.DEBUG) {
+    console.log('🐛 DEBUG:', ...args);
+  }
+}
+
+function logInfo(...args) {
+  if (LOG_CONFIG.level <= LOG_LEVELS.INFO) {
+    console.log('📝 INFO:', ...args);
+  }
+}
+
+function logWarn(...args) {
+  if (LOG_CONFIG.level <= LOG_LEVELS.WARN) {
+    console.warn('⚠️  WARN:', ...args);
+  }
+}
+
+function logError(...args) {
+  if (LOG_CONFIG.level <= LOG_LEVELS.ERROR) {
+    console.error('❌ ERROR:', ...args);
+  }
+}
+
+function logRequest(req) {
+  if (!LOG_CONFIG.logRequests) return;
+
+  const method = req.method;
+  const path = req.path;
+  const clientId = req.headers['x-tunnel-client-id'] || req.query.client_id || 'anonymous';
+
+  if (path === '/tunnel.TunnelService/PollFrames') {
+    return;
+  }
+
+  if (path === '/health' || path === '/favicon.ico') {
+    return;
+  }
+
+  if (['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'].includes(method)) {
+    const clientId = req.headers['x-tunnel-client-id'] ||
+                    req.query.client_id ||
+                    req.cookies?.tunnel_client_id ||
+                    'anonymous';
+  const methodColors = {
+    'GET': '🟢',
+    'POST': '🔵',
+    'PUT': '🟣',
+    'DELETE': '🔴',
+    'PATCH': '🟠',
+    'OPTIONS': '⚪'
+  };
+
+  const methodIcon = methodColors[method] || '⚫';
+
+  console.log(`${methodIcon} ${method} ${path} (client: ${clientId.substring(0, 15)}...)`);
+}
+}
+function logStaticRequest(path, clientId = 'anonymous') {
+  if (!LOG_CONFIG.logStatic) return;
+  console.log(`📁 STATIC: ${path} (${clientId.substring(0, 15)}...)`);
+}
+
+function logResponse(requestId, status, path = '') {
+  if (!LOG_CONFIG.logResponses) return;
+
+  const statusIcon = status >= 400 ? '❌' : status >= 300 ? '🔄' : '✅';
+  const shortId = requestId ? requestId.substring(0, 8) : 'unknown';
+
+  console.log(`${statusIcon} ${status} ${path || ''} [${shortId}]`);
+}
 // ==================== УТИЛИТЫ ====================
 
 function addToQueue(clientId, frame) {
@@ -174,10 +269,9 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-// Подключаем cookie-parser
 import cookieParser from 'cookie-parser';
 app.use(cookieParser());
+
 
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/') ||
@@ -238,8 +332,7 @@ app.use(['/static', '/media', '/admin/static', '/files'], async (req, res) => {
     }
   }
 
-  console.log(`📁 STATIC FILE: ${originalPath}`);
-
+  logStaticRequest(originalPath, req.headers['x-tunnel-client-id']);
   // Находим активный laptop
   let activeLaptop = null;
   for (const [clientId, client] of clients.entries()) {
@@ -445,7 +538,7 @@ app.options('/api/*', (req, res) => {
 
 // Логирование входящих запросов (для отладки)
 app.use((req, res, next) => {
-  console.log(`📥 ${req.method} ${req.path}`);
+  logRequest(req);
   next();
 });
 app.get('/favicon.ico', (req, res) => {
@@ -462,15 +555,28 @@ app.post('/tunnel.TunnelService/SendFrame', (req, res) => {
     req.on('end', () => {
       try {
         const rawBody = Buffer.concat(chunks);
-        console.log(`🚨 SERVER: SendFrame request received, body length: ${rawBody.length}`);
-
+        if (LOG_CONFIG.logGrpc) {
+          console.log('🚨 SERVER: SendFrame request received');
+        }
         const protoData = parseGrpcWebMessage(rawBody);
         const request = tunnelProto.SendFrameRequest.deserializeBinary(protoData);
 
         const frame = request.getFrame();
         const clientId = request.getClientId();
         const frameId = frame.getFrameId();
-
+        const frameType = frame.getType();
+        // Логируем в зависимости от типа фрейма
+        switch (frameType) {
+          case tunnelProto.FrameType.HTTP_RESPONSE:
+            logInfo(`HTTP Response from ${clientId.substring(0, 15)}...`);
+            break;
+          case tunnelProto.FrameType.HTTP_REQUEST:
+            logInfo(`HTTP Request from ${clientId.substring(0, 15)}...`);
+            break;
+          case tunnelProto.FrameType.PING:
+            logDebug(`Ping from ${clientId.substring(0, 15)}...`);
+            break;
+        }
         // Проверяем не обрабатывали ли уже этот фрейм
         const frameKey = `${clientId}_${frameId}`;
         if (processedFrames.has(frameKey)) {
@@ -491,7 +597,6 @@ app.post('/tunnel.TunnelService/SendFrame', (req, res) => {
 
         processedFrames.set(frameKey, Date.now());
 
-        const frameType = frame.getType();
         const payload = frame.getPayload_asU8();
 
         switch (frameType) {
@@ -562,9 +667,7 @@ app.post('/tunnel.TunnelService/PollFrames', (req, res) => {
         const clientId = request.getClientId();
         const tunnelId = request.getTunnelId();
         const lastFrameId = request.getLastFrameId() || '';
-        const timeoutMs = Math.min(request.getTimeoutMs() || 3000, 10000); // Уменьшаем timeout
-
-        console.log(`📥 Poll from ${clientId}, lastFrameId: ${lastFrameId || '(none)'}`);
+        const timeoutMs = Math.min(request.getTimeoutMs() || 3000, 10000);
 
         // Проверяем клиента
         const client = clients.get(clientId);
@@ -578,18 +681,31 @@ app.post('/tunnel.TunnelService/PollFrames', (req, res) => {
         const messages = getMessagesFromQueue(clientId, lastFrameId);
 
         if (messages.length > 0) {
-          // Есть сообщения - сразу отвечаем
+          // Есть сообщения - логируем и отвечаем
+          logInfo(`Poll ${clientId.substring(0, 15)}... got ${messages.length} frame(s)`);
           const frames = messages.map(item => item.frame);
           const lastSentFrameId = messages[messages.length - 1]?.id;
           return safeSendPollResponse(clientId, res, frames, false, lastSentFrameId);
         }
 
-        // Нет сообщений - начинаем short polling (не long!)
-        console.log(`⏳ No messages for ${clientId}, immediate empty response`);
+        // Нет сообщений - умное логирование
+        if (LOG_CONFIG.pollSpamSuppression) {
+          const now = Date.now();
+          const lastLog = lastPollLog.get(clientId) || 0;
+
+          if (now - lastLog > LOG_CONFIG.pollSpamInterval) {
+            logDebug(`Poll ${clientId.substring(0, 15)}... waiting (empty)`);
+            lastPollLog.set(clientId, now);
+          }
+        } else {
+          logDebug(`Poll ${clientId.substring(0, 15)}... waiting (empty)`);
+        }
+
+        // Отправляем пустой ответ
         safeSendPollResponse(clientId, res, [], false, lastFrameId);
 
       } catch (error) {
-        console.error('❌ PollFrames error:', error);
+        logError('PollFrames error:', error.message);
         if (!res.headersSent) {
           const errorResponse = createGrpcWebError(13, error.message);
           res.setHeader('Content-Type', 'application/grpc-web+proto');
@@ -599,7 +715,7 @@ app.post('/tunnel.TunnelService/PollFrames', (req, res) => {
     });
 
     req.on('error', (error) => {
-      console.error('❌ PollFrames request error:', error);
+      logError('PollFrames request error:', error.message);
       if (!res.headersSent) {
         const errorResponse = createGrpcWebError(13, error.message);
         res.setHeader('Content-Type', 'application/grpc-web+proto');
@@ -608,7 +724,7 @@ app.post('/tunnel.TunnelService/PollFrames', (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ PollFrames error:', error);
+    logError('PollFrames error:', error.message);
     if (!res.headersSent) {
       const errorResponse = createGrpcWebError(13, error.message);
       res.setHeader('Content-Type', 'application/grpc-web+proto');
@@ -790,7 +906,9 @@ function handleHttpResponseFrame(frame) {
         console.log(`⚠️  No pending sync request for ${requestId}`);
         return;
       }
-
+    // Логируем ответ
+    const path = pendingRequest.originalPath || '';
+    logResponse(requestId, statusCode, path);
       const headers = JSON.parse(httpResponse.getHeaders() || '{}');
 
       // Извлекаем куки
@@ -1148,13 +1266,16 @@ function safeSendPollResponse(clientId, res, frames, hasMore, lastFrameId) {
     res.removeHeader('Transfer-Encoding');
 
     res.send(grpcResponse);
-
+    // Логируем только если есть фреймы
+    if (frames.length > 0) {
+      logInfo(`Sent ${frames.length} frame(s) to ${clientId.substring(0, 15)}...`);
+      }
     // Подтверждаем обработку фреймов
     if (frames.length > 0 && lastFrameId) {
       acknowledgeFrames(clientId, lastFrameId);
     }
 
-    console.log(`📤 Sent ${frames.length} frame(s) to ${clientId}`);
+    //console.log(`📤 Sent ${frames.length} frame(s) to ${clientId}`);
 
     return true;
   } catch (error) {
@@ -1819,7 +1940,34 @@ app.get('/health', (req, res) => {
     uptime: process.uptime()
   });
 });
+// Добавьте в конец server.js перед startServer():
+app.post('/api/log-level', express.json(), (req, res) => {
+  const { level, pollSpamSuppression } = req.body;
 
+  if (level !== undefined) {
+    LOG_CONFIG.level = Math.max(0, Math.min(4, parseInt(level)));
+    logInfo(`Log level changed to ${LOG_CONFIG.level}`);
+  }
+
+  if (pollSpamSuppression !== undefined) {
+    LOG_CONFIG.pollSpamSuppression = Boolean(pollSpamSuppression);
+    logInfo(`Poll spam suppression: ${LOG_CONFIG.pollSpamSuppression}`);
+  }
+
+  res.json({
+    success: true,
+    config: LOG_CONFIG,
+    timestamp: Date.now()
+  });
+});
+
+app.get('/api/log-config', (req, res) => {
+  res.json({
+    config: LOG_CONFIG,
+    levels: LOG_LEVELS,
+    timestamp: Date.now()
+  });
+});
 // ==================== ЗАПУСК СЕРВЕРА ====================
 
 async function startServer() {

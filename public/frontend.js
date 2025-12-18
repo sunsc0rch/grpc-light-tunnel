@@ -552,7 +552,8 @@ function setupAjaxDomObserver() {
             /^\/health$/i,
             /^\/status$/i,
             /^\/favicon\.ico$/i,
-            /^\/tunnel\.TunnelService\//
+            /^\/tunnel\.TunnelService\//,
+            /\/files\//i
         ];
 
         return staticPatterns.some(pattern => pattern.test(url));

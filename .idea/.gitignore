@@ -1,0 +1,14 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+/grpc-light-tunnel.iml
+/misc.xml
+/modules.xml
+/inspectionProfiles/profiles_settings.xml
+/sourcesync.xml
+/vcs.xml
+/node_modules
+/laptop/node_modules
+/desktop/node_modules
