@@ -3,6 +3,7 @@
 example:
 
 serverUrl: config.serverUrl || 'https://random.stormkit.dev',
+
 b.Change locaAppUrl in laptop/client.cjs to your local app url:
 
 example:
